@@ -1,0 +1,9 @@
+{application, haircut, [
+  {description, "IRC bot"},
+  {vsn, "0.0.1"}, % remember about `overview.edoc'
+  {registered, []},
+  {applications, [kernel, stdlib, ealirc]},
+  {mod, { haircut_app, []}},
+  {env, []}
+]}.
+% vim:ft=erlang
