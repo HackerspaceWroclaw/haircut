@@ -1,0 +1,35 @@
+#!/usr/bin/escript
+%%! -pz ebin -env ERL_LIBS deps
+%% TODO: drop above lines
+
+%%----------------------------------------------------------------------------
+
+main(["--help"]) ->
+  io:fwrite("Usage: ~s [options]~n", [escript:script_name()]),
+  ok;
+
+main([]) ->
+  % TODO:
+  %   * read `*.ini' config
+  %     * control socket?
+  %     * data directory
+  %       * Dets tables (or Mnesia?)
+  %       * activity logs (links, users' presence)
+  %     * nick, user (`os:getenv("USER")'), full name
+  %     * channels
+  %     * plugins directory (`code:add_pathz()')
+  %   * setup control socket
+  %   * setup logging
+  %   * start commander
+  %     * reload config
+  %     * reload bot code
+  %     * reload commander code
+  %   * start haircut bot
+  %   * indira:sleep_forever()
+  'TODO'.
+
+%%----------------------------------------------------------------------------
+
+
+%%----------------------------------------------------------------------------
+%% vim:ft=erlang
