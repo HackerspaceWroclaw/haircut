@@ -27,7 +27,10 @@ init([] = _Args) ->
   Children = [
     {haircut_commander,
       {haircut_commander, start_link, []},
-      permanent, 5000, worker, [haircut_commander]}
+      permanent, 5000, worker, [haircut_commander]},
+    {haircut_bot,
+      {haircut_bot, start_link, []},
+      permanent, 5000, worker, [haircut_bot]}
   ],
   {ok, {
     {one_for_one, 5, 10},
