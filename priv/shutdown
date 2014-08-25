@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo shutdown | socat unix:"$1" -

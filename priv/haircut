@@ -1,35 +1,152 @@
 #!/usr/bin/escript
 %%! -pz ebin -env ERL_LIBS deps
-%% TODO: drop above lines
+%% TODO: drop above line
+%%
+%% -args_file /etc/haircut/beam.args
 
 %%----------------------------------------------------------------------------
+
+-record(opts, {
+  command = start,
+  config_file,
+  pid_file,
+  control_socket,
+  erl_node,
+  erl_cookie,
+  server,
+  nick,
+  user,
+  full_name,
+  channels
+}).
+
+%%----------------------------------------------------------------------------
+
+main(["-h"]) -> main(["--help"]);
+main(["-?"]) -> main(["--help"]);
 
 main(["--help"]) ->
   io:fwrite("Usage: ~s [options]~n", [escript:script_name()]),
+  io:fwrite("~nRecognized options:~n"),
+  io:fwrite("  --cookie-file=PATH~n"),
+  io:fwrite("  --config=PATH~n"),
+  io:fwrite("  --pid-file=PATH~n"),
+  io:fwrite("  --control-socket=PATH~n"),
   ok;
 
 main([]) ->
-  % TODO:
-  %   * read `*.ini' config
-  %     * control socket?
-  %     * data directory
-  %       * Dets tables (or Mnesia?)
-  %       * activity logs (links, users' presence)
-  %     * nick, user (`os:getenv("USER")'), full name
-  %     * channels
-  %     * plugins directory (`code:add_pathz()')
-  %   * setup control socket
-  %   * setup logging
-  %   * start commander
-  %     * reload config
-  %     * reload bot code
-  %     * reload commander code
-  %   * start haircut bot
-  %   * indira:sleep_forever()
-  'TODO'.
+  io:fwrite("Calling ~s with no configuration is not supported yet~n",
+            [escript:script_name()]),
+  halt(1);
+
+main(Args) ->
+  {ok, {Opts, Command}} = cmdline(Args, #opts{}),
+  case Command of
+    start ->
+      % there won't be any use for sections
+      {ok, Configuration} = read_config(Opts),
+      start(Configuration);
+    _Any ->
+      % except that this doesn't work in escript
+      Command(Opts) % stop, reload_commander, reload_bot, wait_for_start
+  end.
 
 %%----------------------------------------------------------------------------
 
+start(Opts) ->
+  %indira:chdir(),
+  indira:write_pidfile(Opts#opts.pid_file),
+  indira:set_option(indira, listen, [
+    {indira_unix, Opts#opts.control_socket}
+  ]),
+  case Opts of
+    #opts{erl_cookie = undefined, erl_node = undefined} ->
+      skip;
+    #opts{erl_cookie = Cookie, erl_node = undefined} ->
+      indira:distributed(haircut, shortnames, Cookie);
+    #opts{erl_cookie = undefined, erl_node = Node} ->
+      indira:distributed(Node, shortnames);
+    #opts{erl_cookie = Cookie, erl_node = Node} ->
+      indira:distributed(Node, shortnames, Cookie)
+  end,
+  indira:set_option(indira, commander, haircut_commander),
+  indira:setup_logging(haircut, [
+    {stdout, color}
+  ]),
+  %indira:set_option(haircut, ...),
+  indira:start_rec(haircut), % before indira to prevent race condition
+  indira:start_rec(indira),
+  indira:sleep_forever(),
+  ok.
 
 %%----------------------------------------------------------------------------
-%% vim:ft=erlang
+%% read configuration file {{{
+
+read_config(Opts = #opts{config_file = ConfigFile}) ->
+  % we won't use sections from config
+  {ok, {Config, _Sections}} = case ConfigFile of
+    undefined -> {ok, {[], []}};
+    _ -> eni:file(ConfigFile)
+  end,
+  User = proplists:get_value(user, Config, os:getenv("USER")),
+  CombinedOpts = Opts#opts{
+    user      = User,
+    nick      = proplists:get_value(nick, Config, User),
+    full_name = proplists:get_value(full_name, Config, "haircut IRC bot"),
+    server    = proplists:get_value(server, Config),
+    channels  = proplists:get_all_values(channel, Config)
+  },
+  case CombinedOpts of
+    #opts{user = false}       -> {error, no_user};
+    #opts{server = undefined} -> {error, no_server};
+    #opts{channels = []}      -> {error, no_channels};
+    _ -> {ok, CombinedOpts}
+  end.
+
+%% }}}
+%%----------------------------------------------------------------------------
+%% command line processing {{{
+
+cmdline([], Opts) ->
+  {ok, {Opts, Opts#opts.command}};
+
+cmdline(["--cookie-file=" ++ Path | Rest], Opts) ->
+  cmdline(["--cookie-file", Path | Rest], Opts);
+cmdline(["--cookie-file", Path | Rest], Opts) ->
+  case file:read_file(Path) of
+    {ok, <<>>} ->
+      cmdline(Rest, Opts);
+    {ok, CookieContent} ->
+      [Cookie | _] = binary:split(CookieContent, <<"\n">>),
+      NewOpts = Opts#opts{erl_cookie = Cookie},
+      cmdline(Rest, NewOpts);
+    {error, enoent} ->
+      cmdline(Rest, Opts);
+    {error, Reason} ->
+      {error, Reason}
+  end;
+
+cmdline(["--config=" ++ Path | Rest], Opts) ->
+  cmdline(["--config", Path | Rest], Opts);
+cmdline(["--config", Path | Rest], Opts) ->
+  NewOpts = Opts#opts{config_file = Path},
+  cmdline(Rest, NewOpts);
+
+cmdline(["--pid-file=" ++ Path | Rest], Opts) ->
+  cmdline(["--pid-file", Path | Rest], Opts);
+cmdline(["--pid-file", Path | Rest], Opts) ->
+  NewOpts = Opts#opts{pid_file = Path},
+  cmdline(Rest, NewOpts);
+
+cmdline(["--control-socket=" ++ Path | Rest], Opts) ->
+  cmdline(["--control-socket", Path | Rest], Opts);
+cmdline(["--control-socket", Path | Rest], Opts) ->
+  NewOpts = Opts#opts{control_socket = Path},
+  cmdline(Rest, NewOpts);
+
+cmdline([Opt | _Rest], _Opts) ->
+  {error, {bad_option, Opt}}.
+
+% }}}
+%%----------------------------------------------------------------------------
+%% vim:ft=erlang:foldmethod=marker

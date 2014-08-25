@@ -24,7 +24,11 @@ start_link() ->
 %%% supervisor callbacks
 
 init([] = _Args) ->
-  Children = [],
+  Children = [
+    {haircut_commander,
+      {haircut_commander, start_link, []},
+      permanent, 5000, worker, [haircut_commander]}
+  ],
   {ok, {
     {one_for_one, 5, 10},
     Children

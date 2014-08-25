@@ -1,0 +1,27 @@
+state_dir = /var/lib/haircut/state
+activity_logs = /var/lib/haircut/activity
+operation_logs := syslog
+#operation_logs := none
+#operation_logs = /var/log/haircut/operations.log
+
+# TODO
+#alog_mask := ...
+#oplog_mask := ...
+
+server = chat.example.net:6667
+# nick defaults to the same as user
+#nick = ...
+# user defaults to os:getenv("USER")
+#user = ...
+# full_name defaults to "haircut IRC bot"
+#full_name = ...
+
+channel = #indulpro
+channel = #hswro
+
+plugins_dir = /usr/lib/haircut/plugins
+plugins_dir = /etc/haircut/plugins
+# load these plugins
+#plugins := [...]
+
+# vim:ft=dosini
