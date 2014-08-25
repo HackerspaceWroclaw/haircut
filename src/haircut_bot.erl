@@ -9,7 +9,7 @@
 -behaviour(gen_ealirc).
 
 %%% public API
--export([start_link/0, start_link/5]).
+-export([start_link/0, start_link/6]).
 
 %%% gen_ealirc callbacks
 -export([init/1, terminate/2]).
@@ -34,7 +34,8 @@ start_link() ->
   {ok, Port} = application:get_env(port),
   {ok, Nick} = application:get_env(nick),
   {ok, {User, FullName}} = application:get_env(user),
-  start_link(Server, Port, Nick, User, FullName).
+  {ok, Channels} = application:get_env(channels),
+  start_link(Server, Port, Nick, User, FullName, Channels).
 
 %% @doc Start haircut bot process.
 %%
@@ -45,18 +46,20 @@ start_link() ->
 %%   is used as a nick.
 
 -spec start_link(inet:hostname() | inet:ip_address(), integer(),
-                 user | string(), env | string(), string()) ->
+                 user | string(), env | string(), string(),
+                 [ealirc:channel()]) ->
   {ok, pid()} | {error, term()}.
 
-start_link(Server, Port, Nick, env = _User, FullName) ->
+start_link(Server, Port, Nick, env = _User, FullName, Channels) ->
   EnvUser = os:getenv("USER"),
-  start_link(Server, Port, Nick, EnvUser, FullName);
+  start_link(Server, Port, Nick, EnvUser, FullName, Channels);
 
-start_link(Server, Port, user = _Nick, User, FullName) when is_list(User) ->
-  start_link(Server, Port, User, User, FullName);
+start_link(Server, Port, user = _Nick, User, FullName, Channels)
+when is_list(User) ->
+  start_link(Server, Port, User, User, FullName, Channels);
 
-start_link(Server, Port, Nick, User, FullName) ->
-  Args = [Nick, User, FullName],
+start_link(Server, Port, Nick, User, FullName, Channels) ->
+  Args = [Nick, User, FullName, Channels],
   gen_ealirc:connect_link(Server, Port, {local, ?MODULE}, ?MODULE, Args, []).
 
 %%% }}}
@@ -69,9 +72,10 @@ start_link(Server, Port, Nick, User, FullName) ->
 %% @private
 %% @doc Initialize {@link gen_ealirc} state.
 
-init([Nick, User, FullName] = _Args) ->
+init([Nick, User, FullName, Channels] = _Args) ->
   gen_ealirc:nick(self(), Nick),
   gen_ealirc:user(self(), User, none, FullName),
+  gen_ealirc:join(self(), Channels),
   % TODO: `Nick' could be already in use
   {ok, #state{nick = Nick}}.
 
