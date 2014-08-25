@@ -35,8 +35,9 @@ main(["--help"]) ->
   ok;
 
 main([]) ->
-  io:fwrite("Calling ~s with no configuration is not supported yet~n",
+  io:fwrite("Calling ~s with no configuration is not supported yet.~n",
             [escript:script_name()]),
+  main(["--help"]),
   halt(1);
 
 main(Args) ->
@@ -56,9 +57,58 @@ main(Args) ->
 start(Opts) ->
   %indira:chdir(),
   indira:write_pidfile(Opts#opts.pid_file),
+  setup_indira(Opts),
+  setup_haircut(Opts),
+  setup_erlang_networking(Opts),
+  indira:start_rec(haircut), % before indira to prevent race condition
+  indira:start_rec(indira),
+  indira:sleep_forever(),
+  ok.
+
+%%----------------------------------------------------------
+%% setup Indira app environment {{{
+
+setup_indira(Opts) ->
+  % TODO: more control sockets?
   indira:set_option(indira, listen, [
     {indira_unix, Opts#opts.control_socket}
   ]),
+  indira:set_option(indira, commander, haircut_commander),
+  indira:setup_logging(haircut, [{stdout, color}]),
+  ok.
+
+%% }}}
+%%----------------------------------------------------------
+%% setup haircut app environment {{{
+
+setup_haircut(Opts) ->
+  case string:tokens(Opts#opts.server, ":") of
+    [Server, PortStr] -> Port = list_to_integer(PortStr);
+    [Server] -> Port = 6667
+  end,
+  indira:set_option(haircut, server, Server),
+  indira:set_option(haircut, port, Port),
+  indira:set_option(haircut, channels, Opts#opts.channels),
+  case Opts of
+    #opts{nick = undefined} -> ok;
+    #opts{nick = Nick} -> indira:set_option(haircut, nick, Nick)
+  end,
+  case Opts of
+    #opts{user = undefined, full_name = undefined} -> ok;
+    #opts{user = User,      full_name = undefined} ->
+      indira:set_option(haircut, user, {User, "haircut IRC bot"});
+    #opts{user = undefined, full_name = FullName} ->
+      indira:set_option(haircut, user, {env, FullName});
+    #opts{user = User,      full_name = FullName} ->
+      indira:set_option(haircut, user, {User, FullName})
+  end,
+  ok.
+
+%% }}}
+%%----------------------------------------------------------
+%% setup distributed Erlang (if applicable) {{{
+
+setup_erlang_networking(Opts) ->
   case Opts of
     #opts{erl_cookie = undefined, erl_node = undefined} ->
       skip;
@@ -69,15 +119,10 @@ start(Opts) ->
     #opts{erl_cookie = Cookie, erl_node = Node} ->
       indira:distributed(Node, shortnames, Cookie)
   end,
-  indira:set_option(indira, commander, haircut_commander),
-  indira:setup_logging(haircut, [
-    {stdout, color}
-  ]),
-  %indira:set_option(haircut, ...),
-  indira:start_rec(haircut), % before indira to prevent race condition
-  indira:start_rec(indira),
-  indira:sleep_forever(),
   ok.
+
+%% }}}
+%%----------------------------------------------------------
 
 %%----------------------------------------------------------------------------
 %% read configuration file {{{
