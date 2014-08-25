@@ -4,12 +4,12 @@
 %%% @end
 %%%---------------------------------------------------------------------------
 
--module(haircut).
+-module(haircut_bot).
 
 -behaviour(gen_ealirc).
 
 %%% public API
--export([connect/3]).
+-export([start_link/0, start_link/5]).
 
 %%% gen_ealirc callbacks
 -export([init/1, terminate/2]).
@@ -21,11 +21,45 @@
 -record(state, {nick}).
 
 %%%---------------------------------------------------------------------------
-%%% public API
+%%% public API {{{
 
-connect(Server, Port, Nick) ->
-  gen_ealirc:connect(Server, Port, ?MODULE, [Nick], []).
+%% @doc Start haircut bot process, taking configuration from application
+%%   environment.
 
+-spec start_link() ->
+  {ok, pid()} | {error, term()}.
+
+start_link() ->
+  {ok, Server} = application:get_env(server),
+  {ok, Port} = application:get_env(port),
+  {ok, Nick} = application:get_env(nick),
+  {ok, {User, FullName}} = application:get_env(user),
+  start_link(Server, Port, Nick, User, FullName).
+
+%% @doc Start haircut bot process.
+%%
+%%   When `User' is set to `env', the value of `os:getenv("USER")' is used
+%%   here.
+%%
+%%   When `Nick' is set to `user', the value of `User' (after reading `$USER')
+%%   is used as a nick.
+
+-spec start_link(inet:hostname() | inet:ip_address(), integer(),
+                 user | string(), env | string(), string()) ->
+  {ok, pid()} | {error, term()}.
+
+start_link(Server, Port, Nick, env = _User, FullName) ->
+  EnvUser = os:getenv("USER"),
+  start_link(Server, Port, Nick, EnvUser, FullName);
+
+start_link(Server, Port, user = _Nick, User, FullName) when is_list(User) ->
+  start_link(Server, Port, User, User, FullName);
+
+start_link(Server, Port, Nick, User, FullName) ->
+  Args = [Nick, User, FullName],
+  gen_ealirc:connect_link(Server, Port, {local, ?MODULE}, ?MODULE, Args, []).
+
+%%% }}}
 %%%---------------------------------------------------------------------------
 %%% gen_ealirc callbacks
 
@@ -35,9 +69,10 @@ connect(Server, Port, Nick) ->
 %% @private
 %% @doc Initialize {@link gen_ealirc} state.
 
-init([Nick] = _Args) ->
+init([Nick, User, FullName] = _Args) ->
   gen_ealirc:nick(self(), Nick),
-  gen_ealirc:user(self(), Nick, none, Nick),
+  gen_ealirc:user(self(), User, none, FullName),
+  % TODO: `Nick' could be already in use
   {ok, #state{nick = Nick}}.
 
 %% @private

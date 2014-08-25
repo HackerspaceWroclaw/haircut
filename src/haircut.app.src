@@ -3,7 +3,13 @@
   {vsn, "0.0.1"}, % remember about `overview.edoc'
   {registered, [haircut, haircut_commander]},
   {applications, [kernel, stdlib, ealirc]},
-  {mod, { haircut_app, []}},
-  {env, []}
+  {mod, {haircut_app, []}},
+  {env, [
+    {server, undefined},
+    {port, 6667},
+    {channels, []},
+    {nick, user}, % user | string()
+    {user, {env, "haircut IRC bot"}} % {User :: env | string(), FullName :: string()}
+  ]}
 ]}.
 % vim:ft=erlang
