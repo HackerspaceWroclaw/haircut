@@ -60,7 +60,30 @@ when is_list(User) ->
 
 start_link(Server, Port, Nick, User, FullName, Channels) ->
   Args = [Nick, User, FullName, Channels],
-  gen_ealirc:connect_link(Server, Port, {local, ?MODULE}, ?MODULE, Args, []).
+  RegName = {local, ?MODULE},
+  case gen_ealirc:connect_link(Server, Port, RegName, ?MODULE, Args, []) of
+    % connected successfully
+    {ok, Pid} -> {ok, Pid};
+    % network error, to be restarted some other time
+    % TODO: log this event
+    {error, econnaborted} -> ignore();
+    {error, econnrefused} -> ignore();
+    {error, econnreset}   -> ignore();
+    {error, eintr}        -> ignore();
+    {error, enetdown}     -> ignore();
+    {error, enetunreach}  -> ignore();
+    {error, epipe}        -> ignore();
+    {error, erefused}     -> ignore();
+    {error, etimedout}    -> ignore();
+    {error, nxdomain}     -> ignore();
+    % non-network error, not a subject to restart
+    {error, Reason} -> {error, Reason}
+  end.
+
+ignore() ->
+  Message = "network problem, leaving restart to restarter",
+  error_logger:warning_report(haircut, Message),
+  ignore.
 
 %%% }}}
 %%%---------------------------------------------------------------------------
