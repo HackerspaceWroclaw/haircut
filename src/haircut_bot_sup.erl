@@ -1,10 +1,10 @@
 %%%---------------------------------------------------------------------------
 %%% @doc
-%%%   Application's root supervisor.
+%%%   Bot's and bot restarter's supervisor.
 %%% @end
 %%%---------------------------------------------------------------------------
 
--module(haircut_sup).
+-module(haircut_bot_sup).
 
 -behaviour(supervisor).
 
@@ -25,12 +25,12 @@ start_link() ->
 
 init([] = _Args) ->
   Children = [
-    {haircut_commander,
-      {haircut_commander, start_link, []},
-      permanent, 5000, worker, [haircut_commander]},
-    {haircut_bot_sup,
-      {haircut_bot_sup, start_link, []},
-      permanent, 5000, supervisor, [haircut_bot_sup]}
+    {haircut_bot,
+      {haircut_bot, start_link, []},
+      permanent, 5000, worker, [haircut_bot]},
+    {haircut_bot_restarter,
+      {haircut_bot_restarter, start_link, []},
+      permanent, 5000, worker, [haircut_bot_restarter]}
   ],
   {ok, {
     {one_for_one, 5, 10},
