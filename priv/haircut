@@ -1,5 +1,5 @@
 #!/usr/bin/escript
-%%! -pz ebin -env ERL_LIBS deps
+%%! +W w -pz ebin -env ERL_LIBS deps
 %% TODO: drop above line
 %%
 %% -args_file /etc/haircut/beam.args
