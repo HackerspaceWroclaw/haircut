@@ -13,6 +13,7 @@
   control_socket,
   erl_node,
   erl_cookie,
+  shell = false,
   server,
   nick,
   user,
@@ -32,6 +33,7 @@ main(["--help"]) ->
   io:fwrite("  --config=PATH~n"),
   io:fwrite("  --pid-file=PATH~n"),
   io:fwrite("  --control-socket=PATH~n"),
+  io:fwrite("  --debug-shell~n"),
   ok;
 
 main([]) ->
@@ -62,6 +64,10 @@ start(Opts) ->
   setup_erlang_networking(Opts),
   indira:start_rec(haircut), % before indira to prevent race condition
   indira:start_rec(indira),
+  case Opts of
+    #opts{shell = true} -> shell:start();
+    _ -> ok
+  end,
   indira:sleep_forever(),
   ok.
 
@@ -187,6 +193,10 @@ cmdline(["--control-socket=" ++ Path | Rest], Opts) ->
   cmdline(["--control-socket", Path | Rest], Opts);
 cmdline(["--control-socket", Path | Rest], Opts) ->
   NewOpts = Opts#opts{control_socket = Path},
+  cmdline(Rest, NewOpts);
+
+cmdline(["--debug-shell" | Rest], Opts) ->
+  NewOpts = Opts#opts{shell = true},
   cmdline(Rest, NewOpts);
 
 cmdline([Opt | _Rest], _Opts) ->
