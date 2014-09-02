@@ -76,10 +76,8 @@ start(Opts) ->
 
 setup_indira(Opts) ->
   % TODO: more control sockets?
-  indira:set_option(indira, listen, [
-    {indira_unix, Opts#opts.control_socket}
-  ]),
-  indira:set_option(indira, commander, haircut_commander),
+  indira:add_listener(indira_unix, Opts#opts.control_socket),
+  indira:set_commander(haircut_commander),
   indira:setup_logging(haircut, [{stdout, color}]),
   ok.
 
