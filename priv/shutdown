@@ -1,3 +1,35 @@
-#!/bin/sh
+#!/usr/bin/escript
+%%! -pz ebin -env ERL_LIBS deps
 
-echo shutdown | socat unix:"$1" -
+%%----------------------------------------------------------------------------
+
+main([])     -> main(["--help"]);
+main(["-h"]) -> main(["--help"]);
+main(["--help"]) ->
+  io:fwrite("Usage: ~s haircut_control.sock~n", [escript:script_name()]),
+  ok;
+
+main([SocketPath]) ->
+  % TODO: replace it with Indira's high-level client API, once it is defined
+  case indira_af_unix:connect(SocketPath, [{active, true}]) of
+    {ok, Socket} ->
+      indira_af_unix:send(Socket, "shutdown\n"),
+      flush(Socket);
+    {error, Reason} ->
+      io:fwrite("Error connecting to haircut: ~p~n", [Reason]),
+      halt(1)
+  end.
+
+%%----------------------------------------------------------------------------
+
+flush(Socket) ->
+  receive
+    {unix, Socket, Line} ->
+      io:put_chars(Line),
+      flush(Socket);
+    {unix_closed, Socket} ->
+      ok
+  end.
+
+%%----------------------------------------------------------------------------
+%% vim:ft=erlang:foldmethod=marker
