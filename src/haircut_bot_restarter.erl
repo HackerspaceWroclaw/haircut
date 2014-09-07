@@ -161,7 +161,7 @@ monitor_all([{Name, Pid} | Rest] = _Processes) ->
       MonitorRef = make_ref(),
       self() ! {'DOWN', MonitorRef, process, undefined, undefined};
     _ when is_pid(Pid) ->
-      MonitorRef = monitor(process, Pid)
+      MonitorRef = erlang:monitor(process, Pid)
   end,
   Record = {MonitorRef, Name},
   [Record | monitor_all(Rest)].
