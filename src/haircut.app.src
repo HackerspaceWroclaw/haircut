@@ -1,7 +1,15 @@
 {application, haircut, [
   {description, "IRC bot"},
   {vsn, "0.0.1"}, % remember about `overview.edoc'
-  {registered, [haircut_sup, haircut_commander, haircut_bot, haircut_bot_sup]},
+  {registered, [
+    haircut_sup,
+    haircut_commander,
+    haircut_log_sup,
+    haircut_log_activity,
+    haircut_log_operational,
+    haircut_bot_sup,
+    haircut_bot
+  ]},
   {applications, [kernel, stdlib, ealirc]},
   {mod, {haircut_app, []}},
   {env, [

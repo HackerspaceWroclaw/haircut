@@ -5,6 +5,8 @@
 %%%   formatted and stored and what log types are to be handled by Indira.
 %%%
 %%% @TODO Send events with stack trace somewhere to log detailed details.
+%%% @TODO Split this module to collect operational logs separately from usage
+%%%   (operational logs will go to Indira in the future).
 %%% @end
 %%%---------------------------------------------------------------------------
 
@@ -61,7 +63,7 @@ handle_event({info_report, _GLead, {_Pid, Type, Report}} = _Event, State) ->
   case {Type,Report} of
     {progress, [{application, App}, {started_at, _AppNode}]} ->
       % application started
-      io:fwrite(". application ~s started~n", [App]);
+      oplog(info, "application started", [{application, App}]);
     {progress, [{supervisor, {_SupPid, _SupName}}, {started, _Child}]} ->
       % child started
       % TODO: what is `SupName' when supervisor is not a registered process?
@@ -69,16 +71,18 @@ handle_event({info_report, _GLead, {_Pid, Type, Report}} = _Event, State) ->
       ignore;
     {std_info, [{application, App}, {exited, stopped}, {type, _StartType}]} ->
       % application stopped
-      io:fwrite(". application ~s stopped~n", [App]);
+      oplog(info, "application stopped", [{application, App}]);
     {std_info, [{application, App}, {exited, Reason}, {type, _StartType}]} ->
       % application stopped unexpectedly
-      io:fwrite("!! application ~s crashed (~1024p)~n", [App, Reason]);
+      oplog(error, "application crashed",
+            [{application, App}, {reason, normalize_reason(Reason)}]);
     {std_info, [{indira_info, MsgType} | Context]} ->
       % Indira INFO messages
-      io:fwrite(". indira[~p]: ~1024p~n", [MsgType, Context]);
+      oplog(info, MsgType, [{context, Context}]);
     {_,_} ->
       % TODO: haircut's own logs
       % TODO: warnings (+W i)
+      io:fwrite("# ignored info type=~p: ~1024p~n", [Type, Report]),
       ignore
   end,
   {ok, State};
@@ -94,20 +98,31 @@ handle_event({error_report, _GLead, {Pid, Type, Report}} = _Event, State) ->
     {supervisor_report, [{supervisor, {_SupPid, _SupName} = SupId},
                           {errorContext, start_error},
                           {reason, Reason}, {offender, ChildProps}]} ->
-      % similar to crash report above, but cleaner MFA specification and is
-      % generated even for processes that got exit signal
-      format_supervisor_start_error_report({SupId, Pid}, Reason, ChildProps);
+      oplog(error, "process start error",
+            [{reason, normalize_reason(Reason)},
+              {supervisor, supervisor_info(Pid, SupId)},
+              {child, child_info(ChildProps)}]);
     {supervisor_report, [{supervisor, {_SupPid, _SupName} = SupId},
                           {errorContext, child_terminated},
                           {reason, Reason}, {offender, ChildProps}]} ->
       % similar to crash report above, but cleaner MFA specification and is
       % generated even for processes that got exit signal
-      format_supervisor_crash_report({SupId, Pid}, Reason, ChildProps);
+      TrueReason = normalize_reason(Reason),
+      {Level, Message} = case TrueReason of
+        normal   -> {info,  "process stopped"};
+        shutdown -> {info,  "process shut down"};
+        _        -> {error, "process crashed"}
+      end,
+      oplog(Level, Message,
+            [{reason, TrueReason},
+              {supervisor, supervisor_info(Pid, SupId)},
+              {child, child_info(ChildProps)}]);
     {std_error, [{indira_error, MsgType} | Context]} ->
-      io:fwrite("!! indira[~p]: ~1024p~n", [MsgType, Context]);
+      oplog(critical, MsgType, [{context, Context}]);
     {_,_} ->
       % TODO: haircut's own logs
       % TODO: warnings (no +W flag)
+      io:fwrite("# ignored error type=~p: ~1024p~n", [Type, Report]),
       ignore
   end,
   {ok, State};
@@ -116,8 +131,9 @@ handle_event({error_report, _GLead, {Pid, Type, Report}} = _Event, State) ->
 handle_event({warning_report, _GLead, {_Pid, Type, Report}} = _Event, State) ->
   case {Type,Report} of
     {std_warning, [{indira_error, MsgType} | Context]} ->
-      io:fwrite("! indira[~p]: ~1024p~n", [MsgType, Context]);
+      oplog(error, MsgType, [{context, Context}]);
     {_,_} ->
+      io:fwrite("# ignored warning type=~p: ~1024p~n", [Type, Report]),
       ignore
   end,
   {ok, State};
@@ -152,113 +168,97 @@ code_change(_OldVsn, State, _Extra) ->
 %%----------------------------------------------------------
 
 %%%---------------------------------------------------------------------------
+
+%% @doc Send operational log.
+%%
+%% @spec oplog(atom(), atom() | string() | binary(), list()) ->
+%%   atom()
+
+oplog(Level, Event, Context) when is_list(Event) ->
+  oplog(Level, list_to_binary(Event), Context);
+
+oplog(Level, Event, Context) when is_binary(Event); is_atom(Event) ->
+  try
+    Message = {Level, [{event, Event} | Context]},
+    gen_event:notify(haircut_log_operational, Message)
+  catch
+    error:badarg -> ignore
+  end.
+
+%%%---------------------------------------------------------------------------
 %%% helper functions {{{
 
-%%----------------------------------------------------------
+supervisor_info(Pid, {local, SupName} = _SupId) ->
+  Info = [
+    {name, SupName},
+    {message_origin, pid_to_binary(Pid)}
+  ],
+  Info;
 
-format_supervisor_crash_report(Supervisor, shutdown = _Reason, ChildProps) ->
-  % child was ordered to stop
-  Pid = proplists:get_value(pid, ChildProps),
-  Name = proplists:get_value(name, ChildProps),
-  ChildType = proplists:get_value(child_type, ChildProps),
-  case {Name,ChildType} of
-    {undefined, _} ->
-      % simple_one_for_one, swarm worker (swarm supervisor? unlikely)
-      io:fwrite("! swarm ~p (~p under ~1024p) shut down~n",
-                [Pid, ChildType, format_supervisor(Supervisor)]);
-    {_, supervisor} ->
-      io:fwrite("! supervisor ~p (pid ~p) shut down~n", [Name, Pid]);
-    {_, worker} ->
-      io:fwrite("! ~p (pid ~p) shut down~n", [Name, Pid])
-  end,
-  ok;
-
-format_supervisor_crash_report(Supervisor, normal = _Reason, ChildProps) ->
-  % child stopped
-  Pid = proplists:get_value(pid, ChildProps),
-  Name = proplists:get_value(name, ChildProps),
-  ChildType = proplists:get_value(child_type, ChildProps),
-  case {Name,ChildType} of
-    {undefined, _} ->
-      % simple_one_for_one, swarm worker (swarm supervisor? unlikely)
-      io:fwrite(". swarm ~p (~p under ~1024p) stopped normally~n",
-                [Pid, ChildType, format_supervisor(Supervisor)]);
-    {_, supervisor} ->
-      io:fwrite(". supervisor ~p (pid ~p) stopped normally~n", [Name, Pid]);
-    {_, worker} ->
-      io:fwrite(". ~p (pid ~p) stopped normally~n", [Name, Pid])
-  end,
-  ok;
-
-format_supervisor_crash_report(Supervisor, Reason, ChildProps) ->
-  % child died
-  Pid = proplists:get_value(pid, ChildProps),
-  Name = proplists:get_value(name, ChildProps),
-  ChildType = proplists:get_value(child_type, ChildProps),
-  TrueReason = format_exit_reason(Reason),
-  case {Name,ChildType} of
-    {undefined, _} ->
-      % simple_one_for_one, swarm worker (swarm supervisor? unlikely)
-      io:fwrite("! swarm ~p (~p under ~1024p) crashed: ~1024p~n",
-                [Pid, ChildType, format_supervisor(Supervisor), TrueReason]);
-    {_, supervisor} ->
-      io:fwrite("! supervisor ~p (pid ~p) crashed: ~1024p~n",
-                [Name, Pid, TrueReason]);
-    {_, worker} ->
-      io:fwrite("! ~p (pid ~p) crashed: ~1024p~n", [Name, Pid, TrueReason])
-  end,
-  ok.
+supervisor_info(Pid, {SupPid, SupName} = _SupId) when is_pid(SupPid) ->
+  Info = [
+    {pid, pid_to_binary(SupPid)},
+    {name, SupName},
+    {message_origin, pid_to_binary(Pid)}
+  ],
+  Info.
 
 %%----------------------------------------------------------
 
-format_supervisor_start_error_report(Supervisor, Reason, ChildProps) ->
-  Name = proplists:get_value(name, ChildProps),
-  ChildType = proplists:get_value(child_type, ChildProps),
-  TrueReason = format_exit_reason(Reason),
-  case {Name,ChildType} of
-    {undefined, _} ->
-      % simple_one_for_one, swarm worker (swarm supervisor? unlikely)
-      io:fwrite("! swarm ~p (under ~1024p) didn't start: ~1024p~n",
-                [ChildType, format_supervisor(Supervisor), TrueReason]);
-    {_, supervisor} ->
-      io:fwrite("! supervisor ~p didn't start: ~p~n",
-                [Name, TrueReason]);
-    {_, worker} ->
-      io:fwrite("! ~p didn't start: ~p~n", [Name, TrueReason])
-  end,
-  ok.
+child_info(ChildProps) ->
+  collect_child_info(ChildProps).
 
 %%----------------------------------------------------------
 
-format_supervisor({{local, Name}, _Pid} = _Supervisor) ->
-  Name;
+collect_child_info([] = _ChildProps) ->
+  [];
 
-format_supervisor({{Pid, Name}, Pid} = _Supervisor) ->
-  {Name, Pid};
+collect_child_info([{pid, undefined} | RestInfo]) ->
+  [{pid, undefined} | collect_child_info(RestInfo)];
+collect_child_info([{pid, Pid} | RestInfo]) when is_pid(Pid) ->
+  [{pid, pid_to_binary(Pid)} | collect_child_info(RestInfo)];
 
-format_supervisor({{_SomePid, Name}, Pid} = _Supervisor) ->
-  {Name, Pid}.
+collect_child_info([{name, undefined} | RestInfo]) ->
+  collect_child_info(RestInfo);
+collect_child_info([{name, Name} | RestInfo]) ->
+  [{name, Name} | collect_child_info(RestInfo)];
+
+collect_child_info([{child_type, Type} | RestInfo]) ->
+  [{type, Type} | collect_child_info(RestInfo)];
+
+collect_child_info([_Info | RestInfo]) ->
+  collect_child_info(RestInfo).
 
 %%----------------------------------------------------------
 
-format_exit_reason({{TrueReason, _Value}, Stack} = _Reason)
+pid_to_binary(Pid) when is_pid(Pid) ->
+  list_to_binary(pid_to_list(Pid)).
+
+%%----------------------------------------------------------
+
+normalize_reason({{TrueReason, _Value}, Stack} = _Reason)
 when is_list(Stack) ->
   % `{badmatch,V}', `{case_clause,V}', `{try_clause,V}', ...
   TrueReason;
 
-format_exit_reason({undef, [{MissM,MissF,MissArgs} | _] = _Stack} = _Reason) ->
+normalize_reason({undef, [{MissM,MissF,MissArgs} | _] = _Stack} = _Reason) ->
   % undefined function
+  % TODO: FuncName = <<
+  %   (atom_to_binary(MissM, utf8))/binary, ":",
+  %   (atom_to_binary(MissF, utf8))/binary, "/",
+  %   (list_to_binary(integer_to_list(length(MissArgs))))/binary
+  % >>
   {undef, {MissM, MissF, length(MissArgs)}};
 
-format_exit_reason({TrueReason, Stack} = _Reason) when is_list(Stack) ->
+normalize_reason({TrueReason, Stack} = _Reason) when is_list(Stack) ->
   % process died (with stack trace)
   TrueReason;
 
-format_exit_reason({'EXIT', TrueReason} = _Reason) ->
+normalize_reason({'EXIT', TrueReason} = _Reason) ->
   % `catch(exit(...))'
   TrueReason;
 
-format_exit_reason(Reason) ->
+normalize_reason(Reason) ->
   Reason.
 
 %%----------------------------------------------------------

@@ -1,0 +1,33 @@
+#!/usr/bin/escript
+%%! +W w -pz ebin -env ERL_LIBS deps
+
+main(_) ->
+  read_print_loop(),
+  ok.
+
+read_print_loop() ->
+  case io:get_line("") of
+    eof ->
+      ok;
+    Data ->
+      Term = load_term(Data),
+      {ok, JSON} = indira_proto_serializer:encode(Term),
+      io:put_chars([JSON, "\n"]),
+      read_print_loop()
+  end.
+
+load_term(Data) when is_binary(Data) ->
+  load_term(binary_to_list(Data));
+
+load_term(Data) ->
+  Line = string:strip(Data),
+  case lists:last(Line) of
+    $. ->
+      {ok, Tokens, _LineNo} = erl_scan:string(Line);
+    _ ->
+      {ok, Tokens, _LineNo} = erl_scan:string(Line ++ ".")
+  end,
+  {ok, Term} = erl_parse:parse_term(Tokens),
+  Term.
+
+%% vim:ft=erlang

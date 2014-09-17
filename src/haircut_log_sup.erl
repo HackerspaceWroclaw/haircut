@@ -1,10 +1,10 @@
 %%%---------------------------------------------------------------------------
 %%% @doc
-%%%   Application's root supervisor.
+%%%   Logger supervisor.
 %%% @end
 %%%---------------------------------------------------------------------------
 
--module(haircut_sup).
+-module(haircut_log_sup).
 
 -behaviour(supervisor).
 
@@ -24,16 +24,14 @@ start_link() ->
 %%% supervisor callbacks
 
 init([] = _Args) ->
+  % TODO: haircut_log_syslog, but some time later it will get moved to Indira
   Children = [
-    {haircut_log_sup,
-      {haircut_log_sup, start_link, []},
-      permanent, 5000, supervisor, [haircut_log_sup]},
-    {haircut_commander,
-      {haircut_commander, start_link, []},
-      permanent, 5000, worker, [haircut_commander]},
-    {haircut_bot_sup,
-      {haircut_bot_sup, start_link, []},
-      permanent, 5000, supervisor, [haircut_bot_sup]}
+    {haircut_log_activity,
+      {haircut_log_activity, start_link, []},
+      permanent, 5000, worker, dynamic},
+    {haircut_log_operational,
+      {haircut_log_operational, start_link, []},
+      permanent, 5000, worker, dynamic}
   ],
   {ok, {
     {one_for_one, 5, 10},
