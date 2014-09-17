@@ -17,7 +17,9 @@
     {port, 6667},
     {channels, []},
     {nick, user}, % user | string()
-    {user, {env, "haircut IRC bot"}} % {User :: env | string(), FullName :: string()}
+    {user, {env, "haircut IRC bot"}}, % {User :: env | string(), FullName :: string()}
+    {op_log, syslog},    % none | syslog | string()
+    {activity_log, none} % none | string()
   ]}
 ]}.
 % vim:ft=erlang
