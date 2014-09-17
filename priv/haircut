@@ -14,6 +14,8 @@
   erl_node,
   erl_cookie,
   shell = false,
+  op_log,
+  activity_log,
   server,
   nick,
   user,
@@ -64,6 +66,8 @@ start(Opts) ->
   setup_erlang_networking(Opts),
   indira:start_rec(haircut), % before indira to prevent race condition
   indira:start_rec(indira),
+  gen_event:notify(haircut_log_operational,
+                   {info, [{event,<<"haircut started">>}]}),
   case Opts of
     #opts{shell = true} -> shell:start();
     _ -> ok
@@ -96,6 +100,14 @@ setup_haircut(Opts) ->
   case Opts of
     #opts{nick = undefined} -> ok;
     #opts{nick = Nick} -> indira:set_option(haircut, nick, Nick)
+  end,
+  case Opts of
+    #opts{op_log = undefined} -> ok;
+    #opts{op_log = OpL} -> indira:set_option(haircut, op_log, OpL)
+  end,
+  case Opts of
+    #opts{activity_log = undefined} -> ok;
+    #opts{activity_log = AL} -> indira:set_option(haircut, activity_log, AL)
   end,
   case Opts of
     #opts{user = undefined, full_name = undefined} -> ok;
@@ -143,7 +155,9 @@ read_config(Opts = #opts{config_file = ConfigFile}) ->
     nick      = proplists:get_value(nick, Config, User),
     full_name = proplists:get_value(full_name, Config, "haircut IRC bot"),
     server    = proplists:get_value(server, Config),
-    channels  = proplists:get_all_values(channel, Config)
+    channels  = proplists:get_all_values(channel, Config),
+    op_log       = proplists:get_value(system_log, Config),
+    activity_log = proplists:get_value(activity_log, Config)
   },
   case CombinedOpts of
     #opts{user = false}       -> {error, no_user};

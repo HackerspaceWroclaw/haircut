@@ -1,8 +1,8 @@
 state_dir = /var/lib/haircut/state
-activity_logs = /var/lib/haircut/activity
-operation_logs := syslog
-#operation_logs := none
-#operation_logs = /var/log/haircut/operations.log
+activity_log = /var/lib/haircut/activity
+system_log := syslog
+#system_log := none
+#system_log = /var/log/haircut/operations.log
 
 # TODO
 #alog_mask := ...
