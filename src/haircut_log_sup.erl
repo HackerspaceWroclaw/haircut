@@ -24,8 +24,10 @@ start_link() ->
 %%% supervisor callbacks
 
 init([] = _Args) ->
-  % TODO: haircut_log_syslog, but some time later it will get moved to Indira
   Children = [
+    {haircut_syslog,
+      {haircut_syslog, start_link, []},
+      permanent, 5000, worker, [haircut_syslog]},
     {haircut_log_activity,
       {haircut_log_activity, start_link, []},
       permanent, 5000, worker, dynamic},

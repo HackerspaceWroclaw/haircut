@@ -26,8 +26,8 @@ start_link() ->
 
 add_handlers(_Pid, none = _LogSink) ->
   ok;
-add_handlers(_Pid, syslog = _LogSink) ->
-  'TODO';
+add_handlers(Pid, syslog = _LogSink) ->
+  gen_event:add_handler(Pid, haircut_syslog_term_h, []);
 add_handlers(Pid, LogSink) when is_list(LogSink) ->
   gen_event:add_handler(Pid, haircut_file_term_h, LogSink).
 
