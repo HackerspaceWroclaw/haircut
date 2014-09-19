@@ -86,7 +86,7 @@ try_syslog(Level, Message) ->
     _        -> warning
   end,
   try
-    haircut_syslog ! {syslog, haircut, daemon, SyslogPriority, Message}
+    indira_syslog ! {syslog, haircut, daemon, SyslogPriority, Message}
   catch
     error:badarg -> ignore
   end.

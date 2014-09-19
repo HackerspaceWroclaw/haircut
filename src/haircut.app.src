@@ -4,7 +4,6 @@
   {registered, [
     haircut_sup,
     haircut_commander,
-    haircut_syslog,
     haircut_log_sup,
     haircut_log_activity,
     haircut_log_operational,
