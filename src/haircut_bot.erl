@@ -13,12 +13,18 @@
 
 %%% gen_ealirc callbacks
 -export([init/1, terminate/2]).
+-export([connected/2, disconnected/2]).
 -export([handle_call/3, handle_cast/2, handle_info/2, handle_message/4]).
 -export([code_change/3]).
 
 %%%---------------------------------------------------------------------------
 
--record(state, {nick}).
+-define(RECONNECT_INTERVAL, 10000). % reconnect after 10s
+-record(state, {
+  nick :: ealirc:nick(),
+  user :: {string(), string()},
+  channels :: [ealirc:channel()]
+}).
 
 %%%---------------------------------------------------------------------------
 %%% public API {{{
@@ -60,30 +66,7 @@ when is_list(User) ->
 
 start_link(Server, Port, Nick, User, FullName, Channels) ->
   Args = [Nick, User, FullName, Channels],
-  RegName = {local, ?MODULE},
-  case gen_ealirc:connect_link(Server, Port, RegName, ?MODULE, Args, []) of
-    % connected successfully
-    {ok, Pid} -> {ok, Pid};
-    % network error, to be restarted some other time
-    % TODO: log this event
-    {error, econnaborted} -> ignore();
-    {error, econnrefused} -> ignore();
-    {error, econnreset}   -> ignore();
-    {error, eintr}        -> ignore();
-    {error, enetdown}     -> ignore();
-    {error, enetunreach}  -> ignore();
-    {error, epipe}        -> ignore();
-    {error, erefused}     -> ignore();
-    {error, etimedout}    -> ignore();
-    {error, nxdomain}     -> ignore();
-    % non-network error, not a subject to restart
-    {error, Reason} -> {error, Reason}
-  end.
-
-ignore() ->
-  Message = "network problem, leaving restart to restarter",
-  error_logger:warning_report(haircut, Message),
-  ignore.
+  gen_ealirc:start_link({local, ?MODULE}, ?MODULE, Args, {Server, Port}, []).
 
 %%% }}}
 %%%---------------------------------------------------------------------------
@@ -96,17 +79,41 @@ ignore() ->
 %% @doc Initialize {@link gen_ealirc} state.
 
 init([Nick, User, FullName, Channels] = _Args) ->
-  gen_ealirc:nick(self(), Nick),
-  gen_ealirc:user(self(), User, none, FullName),
-  gen_ealirc:join(self(), Channels),
-  % TODO: `Nick' could be already in use
-  {ok, #state{nick = Nick}}.
+  State = #state{
+    nick = Nick,
+    user = {User, FullName},
+    channels = Channels
+  },
+  {ok, State}.
 
 %% @private
 %% @doc Clean up {@link gen_ealirc} state.
 
 terminate(_Reason, _State) ->
   ok.
+
+%% @private
+%% @doc Configure IRC connection.
+
+connected(_Socket, State = #state{nick = Nick, user = {User, FullName},
+                                  channels = Channels}) ->
+  error_logger:info_report(bot, [{event, connected}]),
+  % TODO: `Nick' could be already in use
+  gen_ealirc:nick(self(), Nick),
+  gen_ealirc:user(self(), User, none, FullName),
+  gen_ealirc:join(self(), Channels),
+  {ok, State}.
+
+%% @private
+%% @doc Handle the case when the connection was lost.
+
+disconnected({connect,_} = _Reason, State) ->
+  error_logger:info_report(bot, [{event, no_connection}]),
+  {reconnect, ?RECONNECT_INTERVAL, State};
+
+disconnected(_Reason, State) ->
+  error_logger:info_report(bot, [{event, connection_lost}]),
+  {reconnect, ?RECONNECT_INTERVAL, State}.
 
 %% }}}
 %%----------------------------------------------------------
