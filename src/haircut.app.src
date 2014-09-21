@@ -6,7 +6,6 @@
     haircut_commander,
     haircut_log_sup,
     haircut_log_activity,
-    haircut_log_operational,
     haircut_bot_sup,
     haircut_bot
   ]},
@@ -18,7 +17,6 @@
     {channels, []},
     {nick, user}, % user | string()
     {user, {env, "haircut IRC bot"}}, % {User :: env | string(), FullName :: string()}
-    {op_log, syslog},    % none | syslog | string()
     {activity_log, none} % none | string()
   ]}
 ]}.

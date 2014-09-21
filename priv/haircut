@@ -66,8 +66,7 @@ start(Opts) ->
   setup_erlang_networking(Opts),
   indira:start_rec(haircut), % before indira to prevent race condition
   indira:start_rec(indira),
-  gen_event:notify(haircut_log_operational,
-                   {info, [{event,<<"haircut started">>}]}),
+  error_logger:info_report([{event,<<"haircut started">>}]),
   case Opts of
     #opts{shell = true} -> shell:start();
     _ -> ok
@@ -82,7 +81,16 @@ setup_indira(Opts) ->
   % TODO: more control sockets?
   indira:add_listener(indira_unix, Opts#opts.control_socket),
   indira:set_commander(haircut_commander),
-  indira:setup_logging(haircut, [{gen_event, haircut_log_h, []}]),
+  case Opts of
+    #opts{op_log = none} ->
+      ok = indira:setup_logging(haircut, []);
+    #opts{op_log = syslog} ->
+      ok = indira:setup_logging(haircut, [syslog]);
+    #opts{op_log = undefined} ->
+      ok = indira:setup_logging(haircut, [syslog]);
+    #opts{op_log = File} when is_list(File) ->
+      ok = indira:setup_logging(haircut, [{file, File}])
+  end,
   ok.
 
 %% }}}
@@ -100,10 +108,6 @@ setup_haircut(Opts) ->
   case Opts of
     #opts{nick = undefined} -> ok;
     #opts{nick = Nick} -> indira:set_option(haircut, nick, Nick)
-  end,
-  case Opts of
-    #opts{op_log = undefined} -> ok;
-    #opts{op_log = OpL} -> indira:set_option(haircut, op_log, OpL)
   end,
   case Opts of
     #opts{activity_log = undefined} -> ok;

@@ -27,9 +27,6 @@ init([] = _Args) ->
   Children = [
     {haircut_log_activity,
       {haircut_log_activity, start_link, []},
-      permanent, 5000, worker, dynamic},
-    {haircut_log_operational,
-      {haircut_log_operational, start_link, []},
       permanent, 5000, worker, dynamic}
   ],
   {ok, {
